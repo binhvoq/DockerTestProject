@@ -50,7 +50,7 @@ echo "📂 Mount thư mục output: $(pwd)/output -> /app/output"
 echo "🔑 Using OpenAI API Key: ${OPENAI_API_KEY:0:10}..."
 echo "================================================"
 
-if docker run --rm --memory=4g \
+if docker run --rm \
     -v "$(pwd)/output:/app/output" \
     -v "$(pwd)/subjects.txt:/app/subjects.txt" \
     -e OPENAI_API_KEY="$OPENAI_API_KEY" \
