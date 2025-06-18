@@ -1,0 +1,159 @@
+---
+description: # Quick Start Guide - Developer Onboarding
+globs: 
+alwaysApply: false
+---
+# Quick Start Guide - Developer Onboarding
+
+## TL;DR - Chạy Pipeline Ngay
+
+### Prerequisites:
+- Docker installed & running
+- OpenAI API key
+- Internet connection
+
+### 30-Second Setup:
+```bash
+cd DockerProject
+export OPENAI_API_KEY="sk-your-key-here"
+echo "Test Topic for Video Generation" > subjects.txt
+chmod +x run.sh && ./run.sh
+```
+
+### Expected Output:
+- `output/plan.txt` - Video mapping file
+- `output/my_result/*.mp4` - Generated videos
+
+## Project Structure At-a-Glance
+
+### Input/Output:
+- **📝 Input**: [DockerProject/subjects.txt](mdc:DockerProject/subjects.txt) - One topic per line
+- **📤 Output**: `output/plan.txt` + `output/my_result/` 
+- **🔗 Integration**: Compatible với [OldProject/upload/uploadTuDongYoutube.py](mdc:OldProject/upload/uploadTuDongYoutube.py)
+
+### Core Files cần biết:
+- **[DockerProject/main.py](mdc:DockerProject/main.py)** - Pipeline orchestrator
+- **[DockerProject/run.sh](mdc:DockerProject/run.sh)** - Docker build & run script
+- **[DockerProject/Dockerfile](mdc:DockerProject/Dockerfile)** - Container definition
+
+## Common Developer Tasks
+
+### 1. Add New Video Topics:
+```bash
+# Edit subjects file
+echo "New Amazing Topic" >> DockerProject/subjects.txt
+
+# Run pipeline
+cd DockerProject && ./run.sh
+```
+
+### 2. Test Individual Components:
+```bash
+# Enter container for debugging
+docker run -it --rm \
+  -v "$(pwd)/output:/app/output" \
+  -v "$(pwd)/subjects.txt:/app/subjects.txt" \
+  -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  video-generation-pipeline /bin/bash
+
+# Run individual scripts
+python generate_content.py
+python create_plan.py
+# etc...
+```
+
+### 3. Modify Pipeline Behavior:
+- **Content length**: Edit `MIN_WORD_COUNT` trong [DockerProject/generate_content.py](mdc:DockerProject/generate_content.py)
+- **Video quality**: Edit video settings trong [DockerProject/video_combiner.py](mdc:DockerProject/video_combiner.py)
+- **Timeout settings**: Edit `TIMEOUT_SECONDS` trong [DockerProject/process_videos.py](mdc:DockerProject/process_videos.py)
+
+### 4. Debug Common Issues:
+```bash
+# Check Docker is running
+docker info
+
+# Verify API key
+echo $OPENAI_API_KEY
+
+# Check output permissions
+ls -la output/
+
+# View container logs
+docker logs [container_name]
+```
+
+## Key Migration Notes
+
+### From OldProject to DockerProject:
+- **Windows paths** → **Container paths** (`/app/`)
+- **Kokoro TTS** → **Google TTS** (gTTS)
+- **Windows SAPI** → **Demo audio fallback**
+- **Local Python envs** → **Containerized dependencies**
+
+### File Compatibility:
+- **Input format**: Same subjects.txt format
+- **Output format**: Same plan.txt và video structure
+- **Integration**: Works với existing upload scripts
+
+## Development Workflow
+
+### 1. Feature Development:
+```bash
+# Make changes to DockerProject files
+# Test locally
+cd DockerProject
+./run.sh
+
+# Verify output
+ls -la output/my_result/
+cat output/plan.txt
+```
+
+### 2. Debugging Pipeline Issues:
+- Check logs cho emoji indicators: ✅ ❌ ⚠️
+- Use interactive container shell cho detailed debugging
+- Test individual components separately
+
+### 3. Production Deployment:
+```bash
+# On VPS/Cloud server
+git clone [repo]
+cd DockerProject
+export OPENAI_API_KEY="your-key"
+# Edit subjects.txt với production topics
+./run.sh
+```
+
+## Emergency Troubleshooting
+
+### Pipeline Fails Completely:
+1. Check `docker info` - Docker running?
+2. Check `echo $OPENAI_API_KEY` - API key set?
+3. Check `cat subjects.txt` - Valid input?
+4. Check logs for specific error messages
+
+### No Videos Generated:
+1. Check `output/plan.txt` exists - Content generation worked?
+2. Check `output/my_result/` empty - Video generation failed?
+3. Run individual components để isolate issue
+4. Check disk space và memory availability
+
+### Videos Have Issues:
+1. **No audio**: Check gTTS functionality
+2. **No images**: Check Google Images access, fallback placeholders
+3. **Poor quality**: Adjust FFmpeg settings trong video_combiner.py
+
+## Next Steps
+
+### For New Developers:
+1. Read [.cursor/rules/video-generation-pipeline.mdc](mdc:.cursor/rules/video-generation-pipeline.mdc) - Complete overview
+2. Read [.cursor/rules/technical-details.mdc](mdc:.cursor/rules/technical-details.mdc) - Deep technical details
+3. Experiment với test topics trong subjects.txt
+4. Review output format để understand integration points
+
+### For Feature Development:
+- Understand pipeline flow: content → plan → video processing
+- Each step has fallback mechanisms
+- All file paths are containerized
+- Output must remain compatible với upload system
+

@@ -1,0 +1,160 @@
+---
+description: # Video Generation Pipeline - Project Migration Documentation
+globs: 
+alwaysApply: false
+---
+# Video Generation Pipeline - Project Migration Documentation
+
+## Mục Tiêu Dự Án
+
+Dự án này thực hiện migration một video generation pipeline từ Windows-only environment sang Docker-based solution để có thể chạy trên Linux VPS/cloud servers.
+
+### Mục tiêu chính:
+- **From**: Windows-only pipeline trong [OldProject/](mdc:OldProject) chỉ chạy được trên máy Windows
+- **To**: Docker-based pipeline trong [DockerProject/](mdc:DockerProject) chạy được trên bất kỳ máy nào có Docker
+- **Purpose**: Chạy trên VPS Linux (như Vast.ai) để tạo content tự động
+- **Output**: Tạo ra input cho [OldProject/upload/uploadTuDongYoutube.py](mdc:OldProject/upload/uploadTuDongYoutube.py)
+
+## Cấu Trúc Project Cũ (OldProject)
+
+### Pipeline Flow của OldProject:
+1. **[OldProject/getNoiDungBanDau/generateContent.py](mdc:OldProject/getNoiDungBanDau/generateContent.py)** - Entry point
+   - Đọc từ `subjects.txt`
+   - Sử dụng OpenAI API tạo content chi tiết
+   - Output: `content.txt`
+   - Tự động gọi `planCreate.py`
+
+2. **[OldProject/getNoiDungBanDau/planCreate.py](mdc:OldProject/getNoiDungBanDau/planCreate.py)**
+   - Chia `content.txt` thành các script files
+   - Tạo `myplan/` directory với individual script files
+   - Tạo `plan.txt` mapping titles to script files
+   - Tự động gọi `_planRunner.py`
+
+3. **[OldProject/_planRunner.py](mdc:OldProject/_planRunner.py)** - Main controller
+   - Đọc `plan.txt` và xử lý từng video
+   - Có retry logic và progress tracking
+   - Cho mỗi video: copy script → chạy `z_cleaner.py` → chạy `combine.py`
+   - Output: `my_result/` với các video files
+
+4. **Video Generation Subprocess**:
+   - **[OldProject/z_cleaner.py](mdc:OldProject/z_cleaner.py)**: Clean up, gọi `audio_generate.py`
+   - **[OldProject/audio_generate.py](mdc:OldProject/audio_generate.py)**: Text-to-speech (Kokoro TTS fallback SAPI), gọi `think_keyword_img.py`
+   - **[OldProject/think_keyword_img.py](mdc:OldProject/think_keyword_img.py)**: Generate keywords với OpenAI, gọi `images_download.py`
+   - **[OldProject/images_download.py](mdc:OldProject/images_download.py)**: Download images từ Google, gọi `combine.py`
+   - **[OldProject/combine.py](mdc:OldProject/combine.py)**: Combine audio + images thành video với FFmpeg
+
+### Key Dependencies của OldProject:
+- Windows-specific TTS (SAPI)
+- Kokoro TTS environment 
+- Hardcoded Windows paths
+- Local Python environments
+
+## Cấu Trúc Project Mới (DockerProject)
+
+### Main Components:
+
+#### Container Setup:
+- **[DockerProject/Dockerfile](mdc:DockerProject/Dockerfile)**: Python 3.10 + FFmpeg + system dependencies
+- **[DockerProject/requirements.txt](mdc:DockerProject/requirements.txt)**: Python packages (OpenAI, gTTS, Pillow, etc.)
+- **[DockerProject/run.sh](mdc:DockerProject/run.sh)**: Build và chạy Docker workflow
+
+#### Pipeline Components:
+- **[DockerProject/main.py](mdc:DockerProject/main.py)**: Entry point, điều khiển toàn bộ pipeline
+- **[DockerProject/generate_content.py](mdc:DockerProject/generate_content.py)**: Port từ `generateContent.py`
+- **[DockerProject/create_plan.py](mdc:DockerProject/create_plan.py)**: Port từ `planCreate.py`
+- **[DockerProject/process_videos.py](mdc:DockerProject/process_videos.py)**: Port từ `_planRunner.py`
+
+#### Video Generation Components:
+- **[DockerProject/audio_generator.py](mdc:DockerProject/audio_generator.py)**: gTTS thay vì Kokoro TTS
+- **[DockerProject/image_processor.py](mdc:DockerProject/image_processor.py)**: Kết hợp logic từ `think_keyword_img.py` + `images_download.py`
+- **[DockerProject/video_combiner.py](mdc:DockerProject/video_combiner.py)**: Port từ `combine.py`
+
+#### Input/Output:
+- **Input**: [DockerProject/subjects.txt](mdc:DockerProject/subjects.txt) - Danh sách chủ đề
+- **Output**: `output/plan.txt` + `output/my_result/*.mp4`
+
+### Docker Pipeline Flow:
+```
+subjects.txt → generate_content.py → create_plan.py → process_videos.py
+                                                           ↓
+                              audio_generator.py ← process_single_video
+                                     ↓
+                              image_processor.py
+                                     ↓
+                              video_combiner.py → final_video.mp4
+```
+
+## Key Differences & Design Decisions
+
+### Technology Replacements:
+- **TTS**: Kokoro TTS + Windows SAPI → Google TTS (gTTS)
+- **Environment**: Windows-specific → Docker Linux container
+- **Paths**: Windows absolute paths → Docker container paths
+- **Dependencies**: Local Python envs → Containerized dependencies
+
+### Architecture Improvements:
+- **Separation of Concerns**: Tách riêng audio/image/video processing
+- **Error Handling**: Placeholder images khi download thất bại
+- **Retry Logic**: Maintained từ original với timeout handling
+- **Volume Mounting**: Input/output qua Docker volumes
+
+### Maintained Features:
+- **OpenAI Integration**: Giữ nguyên logic tạo content và keywords
+- **FFmpeg Processing**: Giữ nguyên video combining logic
+- **Progress Tracking**: Giữ nguyên retry và progress system
+- **Output Format**: Tương thích với `uploadTuDongYoutube.py`
+
+## Usage Instructions
+
+### Development Setup:
+```bash
+cd DockerProject
+export OPENAI_API_KEY="your_api_key"
+chmod +x run.sh
+```
+
+### Running Pipeline:
+```bash
+# Edit subjects.txt với topics mong muốn
+# Run pipeline
+./run.sh
+```
+
+### Output Usage:
+- Copy `output/plan.txt` và `output/my_result/` về Windows
+- Sử dụng với [OldProject/upload/uploadTuDongYoutube.py](mdc:OldProject/upload/uploadTuDongYoutube.py)
+
+## Development Notes
+
+### File Path Conventions:
+- Container paths: `/app/` (working directory)
+- Temp files: `/app/temp/`
+- Output: `/app/output/` (mounted volume)
+- Input: `/app/subjects.txt` (mounted file)
+
+### Error Handling Strategies:
+- **TTS Fallback**: gTTS → demo audio generation
+- **Image Fallback**: Google Images → placeholder images  
+- **Video Fallback**: Individual clips → concatenation handling
+
+### Performance Considerations:
+- **Timeout**: 30 minutes per video (configurable)
+- **Retry Logic**: 2 retries per failed video
+- **Memory**: FFmpeg processing cần adequate container memory
+- **Network**: Cần internet access cho OpenAI API và Google Images
+
+## Future Development
+
+### Potential Improvements:
+- **Better TTS**: Integrate cloud TTS services (AWS Polly, Azure Cognitive Services)
+- **Image Quality**: Better image search và filtering
+- **Batch Processing**: Parallel video processing
+- **Monitoring**: Better logging và health checks
+- **Configuration**: Environment-based configuration management
+
+### Scaling Considerations:
+- **GPU Support**: Cho AI processing
+- **Distributed Processing**: Multiple containers
+- **Storage**: Efficient cleanup của temp files
+- **API Limits**: Rate limiting cho OpenAI API calls
+
